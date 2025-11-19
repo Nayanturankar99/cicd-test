@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Install epel-release and nginx
+sudo dnf -y install epel-release nginx 
+sudo dnf -y update
+sudo dnf -y install s3cmd 
+
+# Replace nginx.conf file
+s3cmd get --recursive --progress --force s3://nginx-configuration-file/nginx.conf /etc/nginx/nginx.conf
+sudo chmod 0700 /etc/nginx/nginx.conf
+
+# Start and enable nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
+sudo setenforce 0
+
+# Deployment architecture for Elastic Agent
+deployment_arch="{{ deployment_arch }}"
+
+# Check if Elastic Agent is installed
+if command -v elastic-agent &> /dev/null
+then
+    echo "Elastic Agent is already installed. Enrolling with the Fleet..."
+    echo y | elastic-agent enroll --url="{{ elastic_fleet_url }}" --enrollment-token="{{ elastic_fleet_enrolment_token }}" --tag="{{ elastic_fleet_tags }}"
+else
+    echo "Elastic Agent not found. Installing Elastic Agent..."
+    cd /tmp
+
+    if [[ "$deployment_arch" == "intel" ]]
+    then
+        echo "Downloading and installing Elastic Agent for Intel architecture..."
+        curl -L -O https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-{{elastic_agent_version}}-linux-x86_64.tar.gz
+        tar xzvf elastic-agent-{{elastic_agent_version}}-linux-x86_64.tar.gz
+        cd elastic-agent-{{elastic_agent_version}}-linux-x86_64
+        echo y | ./elastic-agent install --url="{{ elastic_fleet_url }}" --enrollment-token="{{ elastic_fleet_enrolment_token }}" --tag="{{ elastic_fleet_tags }}"
+    elif [[ "$deployment_arch" == "graviton" ]]
+    then
+        echo "Downloading and installing Elastic Agent for Graviton architecture..."
+        curl -L -O https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-{{elastic_agent_version}}-linux-arm64.tar.gz
+        tar xzvf elastic-agent-{{elastic_agent_version}}-linux-arm64.tar.gz
+        cd elastic-agent-{{elastic_agent_version}}-linux-arm64
+        echo y | ./elastic-agent install --url="{{ elastic_fleet_url }}" --enrollment-token="{{ elastic_fleet_enrolment_token }}" --tag="{{ elastic_fleet_tags }}"
+    else
+        echo "Unsupported architecture: $deployment_arch"
+        exit 1
+    fi
+fi
+
+# Restart Elastic Agent and Rsyslog
+echo "Restarting Elastic Agent and Rsyslog services..."
+sudo systemctl restart elastic-agent
+sudo systemctl restart rsyslog
+
+echo "Script execution completed."

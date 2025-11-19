@@ -1,0 +1,12 @@
+---
+    - name: Include the specific AMI deletion logic based on ami_delete_type
+      include_tasks: "{{ ami_delete_type }}.yml"
+      when: ami_delete_type is defined and ami_delete_type | length > 0
+
+    - name: Delete AMIs and  its snapshots
+      amazon.aws.ec2_ami:
+        image_id: "{{ item }}"
+        state: absent
+        delete_snapshot: True
+        region: "{{aws_region}}"
+      with_items: "{{ ami_ids }}"

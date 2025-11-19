@@ -1,0 +1,68 @@
+# Playbook for taking Db-backup and uploading to s3 bucket
+# Notes:
+#   - db_backup --> Role for taking db backup
+#   - restore_db --> Role to restore the db backup
+# Example invocation:
+# ansible-playbook -vvv /etc/ansible/playbooks/backup_db.yml -e backup_db_endpoint="$backup_db_endpoint" -e backup_db_user="$backup_db_user" -e backup_db_password="$backup_db_password" -e backup_type="$backup_type" -e backup_db_names="$backup_db_names" -e backup_table_names="$backup_table_names"  -e backup_path="$backup_path" -e restore_db_endpoint="$restore_db_endpoint" -e restore_db_user="$restore_db_user" -e restore_db_password="$restore_db_password" -e restore_db_name="$restore_db_name" -e restore_with_date_appended="$restore_with_date_appended"
+---
+- hosts: localhost
+  vars:
+    backup_not_compress: "true"
+    backup_db_list: "{{ backup_db_names.split(',') if (backup_type != 'all_dbs') else [] }}"
+    backup_table_list: "{{ backup_table_names.split(',') if (backup_type == 'specific_tables' and backup_table_names != 'all') else [] }}"
+  tasks:
+    - name: set date variable 
+      set_fact:
+        Year: "{{ lookup('pipe', 'TZ=\"Asia/Kolkata\" date +%Y') }}"
+        Month: "{{ lookup('pipe', 'TZ=\"Asia/Kolkata\" date +%m') }}"
+        Day: "{{ lookup('pipe', 'TZ=\"Asia/Kolkata\" date +%d') }}"
+        Hour: "{{ lookup('pipe', 'TZ=\"Asia/Kolkata\" date +%H') }}"
+        Minute: "{{ lookup('pipe', 'TZ=\"Asia/Kolkata\" date +%M') }}"
+
+    - name: Get list of tables
+      community.mysql.mysql_query:
+        login_host: "{{backup_db_endpoint}}"
+        login_user: "{{backup_db_user}}"
+        login_password: "{{backup_db_password}}"
+        query: "SHOW TABLES IN {{backup_db_names}};"
+      register: all_tables
+      when:
+        - (backup_type == "specific_tables" and backup_table_names == "all") or (backup_type == "specific_db_with_tables_seperated")
+
+    - name: Taking db backups
+      include_role:
+        name: "db_backup"
+      vars:
+        db_resource_name: "{{ item }}"
+        db_endpoint: "{{backup_db_endpoint}}"
+        db_user: "{{backup_db_user}}"
+        db_password: "{{backup_db_password}}"
+        db_names: "{{backup_db_names}}"
+      loop: "{{all_tables.query_result[0] | map(attribute='Tables_in_' ~ backup_db_names) | list if all_tables is not skipped else backup_table_list if backup_table_list|length > 0 else backup_db_list if backup_db_list|length > 0 else ['all']}}"
+
+    - name: Find all .sql files in the backup folder
+      find:
+        paths: "{{backup_path}}" 
+        patterns: "*.sql"
+      register: sql_files
+
+    - name: Rename the backup with date appended in backup
+      replace:
+        path: "{{backup_path}}/{{ (item.path | basename) }}"
+        regexp: "{{ item.path.split('/')[-1].split('-')[0] }}"
+        replace: "{{ item.path.split('/')[-1].split('-')[0] }}_{{(item.path | basename).split('-')[-1].split('.')[0]}}"
+        backup: false
+      loop: "{{ sql_files.files }}"
+      when: restore_with_date_appended == 'yes'
+
+    - name: Restore the db-backup from each .sql file
+      include_role:
+        name: "restore_db"
+      vars:
+        restore_target: "{{ item.path }}"
+        db_user: "{{restore_db_user}}"
+        db_password: "{{restore_db_password}}"
+        db_endpoint: "{{restore_db_endpoint}}"
+        db_name: "{{restore_db_name}}"
+      loop: "{{ sql_files.files }}"
+    

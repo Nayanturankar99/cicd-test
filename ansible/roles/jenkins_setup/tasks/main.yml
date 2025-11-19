@@ -1,0 +1,45 @@
+---
+  - name: Update system packages
+    become: yes
+    dnf:
+      name: '*'
+      state: latest
+
+  - name: Install epel-release,ansible,java
+    become: yes
+    dnf:
+      name: "{{ item }}"
+      state: present
+    loop:
+      - epel-release
+      - python3-pip
+      - ansible
+      - java-17-openjdk
+
+  - name: Install boto3 and botocore
+    pip:
+      name: "{{ item }}"
+    loop:
+      - boto3
+      - botocore
+
+  - name: Add Jenkins repository
+    get_url:
+      url: https://pkg.jenkins.io/redhat-stable/jenkins.repo
+      dest: /etc/yum.repos.d/jenkins.repo
+
+  - name: Import Jenkins GPG key
+    rpm_key:
+      state: present
+      key: https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+       
+  - name: Install Jenkins
+    dnf:
+      name: jenkins
+      state: present
+
+  - name: Start and enable Jenkins
+    systemd:
+      name: jenkins
+      state: started
+      enabled: true 

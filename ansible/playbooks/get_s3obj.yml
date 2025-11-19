@@ -1,0 +1,37 @@
+# Generic Playbook for creating Autoscaling policy
+# Notes:
+#   - get_s3obj --> Role to get the details of s3 object.
+# Example invocation:
+#   ansible-playbook -vvv /etc/ansible/playbooks/get_s3obj.yml -e bucket_name=$bucket_name -e object=$object
+---
+- name: Check S3 object storage class
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Get s3 object
+      include_role:
+        name: get_s3obj
+
+    - name: Handle Glacier/Deep Archive restore
+      block:
+        - name: Mark if object is in progress from glacier to standard
+          set_fact:
+            s3obj_storage_status: "OBJ_IN_PROGRESS_FROM_GLACIER_TO_STD"
+          when: ('restore' in s3_metadata.object_info[0].object_data) and ("ongoing-request=\"true\"" in s3_metadata.object_info[0].object_data.restore)
+
+        - name: Mark if object is Glacier
+          set_fact:
+            s3obj_storage_status: "OBJ_IN_GLACIER"
+          when: "'restore' not in s3_metadata.object_info[0].object_data"
+      when:
+        - "'storage_class' in s3_metadata.object_info[0].object_data"
+
+    - name: Mark if object is Standard
+      set_fact:
+        s3obj_storage_status: "OBJ_IN_STD"
+      when:
+        - "'storage_class' not in s3_metadata.object_info[0].object_data"
+    
+    - name: Print the status of the s3 object
+      debug:
+        msg: "{{s3obj_storage_status}}"

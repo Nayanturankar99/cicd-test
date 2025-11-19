@@ -1,0 +1,40 @@
+#!/bin/bash
+
+deployment_arch="{{ deployment_arch }}"
+
+# Change the apm-environment to production in service file
+sed -i 's/-Delastic\.apm\.environment=\(uat\|test\)/-Delastic.apm.environment=production/' /etc/systemd/system/api.service
+
+# Reloads the systemd manager configuration to recognize changes made to service files
+systemctl daemon-reload
+
+#Restart API service
+systemctl restart api.service
+
+# Check if Elastic Agent is installed
+if command -v elastic-agent &> /dev/null
+then
+    echo y | elastic-agent enroll --url="{{ elastic_fleet_url }}" --enrollment-token="{{ elastic_fleet_enrolment_token }}" --tag="{{ elastic_fleet_tags }}"
+else  
+    cd /tmp
+    
+    if [[ "$deployment_arch" == "intel" ]]
+    then
+        curl -L -O https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-{{elastic_agent_version}}-linux-x86_64.tar.gz
+        tar xzvf elastic-agent-{{elastic_agent_version}}-linux-x86_64.tar.gz
+        cd elastic-agent-{{elastic_agent_version}}-linux-x86_64
+        echo y | ./elastic-agent install --url="{{ elastic_fleet_url }}" --enrollment-token="{{ elastic_fleet_enrolment_token }}" --tag="{{ elastic_fleet_tags }}"
+    elif [[ "$deployment_arch" == "graviton" ]]
+    then
+        curl -L -O https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-{{elastic_agent_version}}-linux-arm64.tar.gz
+        tar xzvf elastic-agent-{{elastic_agent_version}}-linux-arm64.tar.gz
+        cd elastic-agent-{{elastic_agent_version}}-linux-arm64
+        echo y | ./elastic-agent install --url="{{ elastic_fleet_url }}" --enrollment-token="{{ elastic_fleet_enrolment_token }}" --tag="{{ elastic_fleet_tags }}"
+    fi
+fi
+
+# Restart Elastic Agent
+systemctl restart elastic-agent
+
+# Restart Rsyslog service
+systemctl restart rsyslog

@@ -1,0 +1,3 @@
+filters:
+  "tag:name": "test-ami"
+aws_region: "us-east-1"

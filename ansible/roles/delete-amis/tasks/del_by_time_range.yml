@@ -1,0 +1,10 @@
+- name: Filter AMIs based on time range
+  set_fact:
+    ami_ids: >-
+      {{
+        unattached_ami_list
+        | map(attribute='image_id') | list
+      }}
+- name: Debug AMI IDs before deletion
+  debug:
+    var: ami_ids

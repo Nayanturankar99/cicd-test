@@ -1,0 +1,34 @@
+# Generic Playbook to scale the asg by passing the asg name
+# Notes:
+#   - find_asg  --> Role to get the asg details by passing the asg name
+#   - scale_asg --> Role to scale the asg based on the capacity passed
+#   - notiy_to_gchat --> Role to notify to gchat
+# Example invocation for notifying if any latest asg is not active:
+#   ansible-playbook -vvv /etc/ansible/playbooks/scale_asg.yml -e asg_name="$asg_name" -e min_capacity="$min_capacity" -e desired_capacity="$desired_capacity" -e max_capacity="$max_capacity" -e google_chat_webhook="$google_chat_webhook" -e job_name="$job_name" -e build_status="$build_status" -e build_timestamp="$build_timestamp" -e build_number="$build_number" -e build_user="$build_user" -e build_url="$build_url" -e scale_reason="$scale_reason"
+
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: call role to get the asg info
+      include_role:
+        name: find_asg
+      vars:
+        asg_tags: {"Name": "{{asg_name | regex_replace('^asg-', '')}}"}
+
+    - fail:
+        msg: "No ASG found with name {{asg_name}}"
+      when: asgs.results | length == 0
+
+    - name: call role to scale the asg
+      include_role:
+        name: scale_asg
+      vars:
+        lt_name: "{{ asgs.results[0].mixed_instances_policy.launch_template.launch_template_specification.launch_template_name if asgs.results[0].mixed_instances_policy is defined else omit}}"
+        instance_types_list: "{{ asgs.results[0].mixed_instances_policy.launch_template.overrides | map(attribute='instance_type') | list if asgs.results[0].mixed_instances_policy is defined else omit}}"
+
+    - name: notify to google chat
+      include_role:
+        name: notify_to_gchat
+      vars: 
+          message: "*ASG {% if desired_capacity | int > asgs.results[0].desired_capacity | int %}Upscaled{% elif desired_capacity | int < asgs.results[0].desired_capacity | int %}Downscaled{% else %}Not Scaled{% endif %}*\n\n*Scaled Capacity:* {{ asgs.results[0].desired_capacity }} to {{ desired_capacity }}\n*ASG Name:* {{ asg_name }}\n*Reason:* {{ scale_reason }}\n*Job Name:* {{ job_name }}\n*Build Status:* {{ build_status }}\n*Build Timestamp:* {{ build_timestamp }}\n*Build Number:* {{ build_number }}\n*Build User:* {{ build_user }}\n*Build URL:* {{ build_url }}"

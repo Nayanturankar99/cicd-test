@@ -1,0 +1,4 @@
+---
+- name: Initiate restore from Glacier/Deep Archive
+  shell: >
+    aws s3api restore-object --bucket "{{ bucket_name }}" --key "{{ object }}" --restore-request '{"Days": 2, "GlacierJobParameters": {"Tier": "Standard"}}' --region {{aws_region}}

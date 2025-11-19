@@ -1,0 +1,52 @@
+    - name: Update all packages
+      dnf:
+        name: '*'
+        state: latest 
+
+    - name: Install required packages
+      dnf:
+        name: 
+          - httpd
+          - git
+        state: present
+
+    - name: Start httpd service
+      systemd:
+        name: httpd
+        state: started
+        enabled: yes
+
+    - name: clone repo and checkout to a branch
+      git:
+        repo: 'https://{{ git_username }}:{{ git_password }}@github.com/igphub/{{repo_name}}.git'
+        dest: '{{build_path}}/{{repo_name}}' 
+        version: '{{checkout_branch}}'
+
+    - name: Add the NodeSource repository
+      yum_repository:
+        name: nodesource
+        description: Node.js Packages for Enterprise Linux
+        baseurl: "https://rpm.nodesource.com/pub_{{ node_version }}.x/el/$releasever/$basearch"
+        gpgcheck: no
+        enabled: yes
+
+    - name: Install nodejs
+      yum:
+        name: nodejs
+        state: present
+
+    - name: Install npm dependencies
+      command:
+        cmd: "npm i"
+        chdir: '{{build_path}}/{{repo_name}}'
+
+    - name: Build the project
+      command:
+        cmd: "npm run build"
+        chdir: '{{build_path}}/{{repo_name}}'
+
+    - name: Copy build files
+      copy:
+        src: '{{build_path}}/{{repo_name}}/{{build_folder}}'
+        dest: '{{build_path}}'
+        remote_src: yes

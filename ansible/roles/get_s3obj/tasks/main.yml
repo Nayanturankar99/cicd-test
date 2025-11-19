@@ -1,0 +1,5 @@
+- name: Get object metadata
+  amazon.aws.s3_object_info:
+    bucket_name: "{{ bucket_name }}"
+    object_name: "{{ object }}"
+  register: s3_metadata

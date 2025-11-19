@@ -1,0 +1,15 @@
+- name: Filter AMIs excluding dont_delete tag
+  set_fact:
+    ami_ids: >-
+      {{
+        (unattached_ami_list
+          | selectattr('tags.dont_delete', 'undefined')
+          | map(attribute='image_id') | list)+
+        (unattached_ami_list
+          | selectattr('tags.dont_delete', 'defined')
+          | selectattr('tags.dont_delete', 'equalto', 'false')
+          | map(attribute='image_id') | list)
+      }}
+- name: Debug filtered AMI IDs
+  debug:
+    var: ami_ids

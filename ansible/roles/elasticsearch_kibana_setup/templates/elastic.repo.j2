@@ -1,0 +1,8 @@
+[elasticsearch]
+name=Elasticsearch repository for {{es_kibana_version.split('.')[0]}}.x packages
+baseurl=https://artifacts.elastic.co/packages/{{es_kibana_version.split('.')[0]}}.x/yum
+gpgcheck=1
+gpgkey=https://artifacts.elastic.co/GPG-KEY-elasticsearch
+enabled=1
+autorefresh=1
+type=rpm-md

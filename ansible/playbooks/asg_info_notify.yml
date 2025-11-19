@@ -1,0 +1,16 @@
+# Generic Playbook to find the asg and notify based on cases
+# Notes:
+#   - asg_info_notify  --> Role to call find_asg and notify_to_gchat roles.
+# Example invocation for notifying if any latest asg is not active:
+#   ansible-playbook -vvv /etc/ansible/playbooks/notify_latest_asg_not_active.yml -e asg_not_active="$asg_not_active" -e services="$services" -e aws_region="$aws_region" -e google_chat_webhook="$google_chat_webhook"
+# Example invocation for notifying if any production stack servers capacity is increased:
+#   ansible-playbook -vvv /etc/ansible/playbooks/asg_info_notify.yml -e extra_asg_stack="$extra_asg_stack" -e services="$services" -e aws_region="$aws_region" -e google_chat_webhook="$google_chat_webhook" -e fe_p_capacity="$fe_p_capacity" -e if_fe_p_capacity="$if_fe_p_capacity" -e ae_fe_p_capacity="$ae_fe_p_capacity" -e nz_if_fe_p_capacity="$nz_if_fe_p_capacity" -e ps24_fe_p_capacity="$ps24_fe_p_capacity" -e pbpone_fe_p_capacity="$pbpone_fe_p_capacity" -e masqa_fe_p_capacity="$masqa_fe_p_capacity" -e api_p_capacity="$api_p_capacity" -e productms_p_capacity="$productms_p_capacity" -e panelapi_p_capacity="$panelapi_p_capacity" -e walletms_p_capacity="$walletms_p_capacity" -e acl_p_capacity="$acl_p_capacity" -e egv_api_p_capacity="$egv_api_p_capacity" -e communication_p_capacity="$communication_p_capacity" -e nz_if_api_p_capacity="$nz_if_api_p_capacity" -e contentms_p_capacity="$contentms_p_capacity" -e optimus_p_capacity="$optimus_p_capacity" -e es_indexing_p_capacity="$es_indexing_p_capacity"
+---
+- hosts: localhost
+  tasks: 
+    - name: Task to call asg_info_notify role for each service
+      include_role:
+        name: asg_info_notify
+      vars:
+        service: "{{ item }}"
+      loop: "{{ services.split(',') }}"

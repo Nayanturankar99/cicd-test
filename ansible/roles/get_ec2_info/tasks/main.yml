@@ -1,0 +1,10 @@
+ - name: Get information about the EC2 instance
+   ec2_instance_info:
+        region: "{{aws_region}}"
+        filters: "{{filter}}"
+   register: instance_info
+
+ - name: Check if instance present or not
+   fail:
+     msg: "Instances {{ check_values.split(',') | difference(instance_info.instances | map(attribute=check_attribute) | list) }} do not exist"
+   when: check_values is defined and check_values.split(',') | difference(instance_info.instances | map(attribute=check_attribute) | list) | length > 0

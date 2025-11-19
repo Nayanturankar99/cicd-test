@@ -1,0 +1,403 @@
+# Generic Playbook for creating monitoring cluster
+# Notes:
+#   - create_tg --> Role for creating a Target Group.
+#   - create_lb --> Role for creating a Application LoadBalancer
+#   - ec2up --> Role for creating the EC2 instances.
+#   - ec2_extra_volume --> Role for adding extra volume to launched  EC2 instances.
+#   - elasticsearch_kibana_setup --> Role for configuring elasticsearch and kibana.
+#   - post_request --> Role for sending an HTTP POST request.
+# Example invocation:
+#   ansible-playbook -vvv /etc/ansible/playbooks/mon-elk-setup.yml -e BUILD_NUMBER="$BUILD_NUMBER" -e build_timestamp="$BUILD_TIMESTAMP" -e start_job_build_number="$BUILD_NUMBER" -e ec2_key_name="$ec2_key_name" -e ec2_sg_id="$ec2_sg_id" -e termination_protection="$termination_protection" -e ec2_instance_profile="$ec2_instance_profile" -e processor_type="$processor_type" -e graviton_ec2_ami_id="$graviton_ec2_ami_id" -e intel_ec2_ami_id="$intel_ec2_ami_id" -e ec2_subnet_id="$ec2_subnet_id"  -e assign_public_ip="$assign_public_ip" -e ec2_key_pair="$ec2_key_pair" -e aws_region="$aws_region" -e ec2_tag_environment="$ec2_tag_environment" -e ec2_tag_cluster="$ec2_tag_cluster" -e ec2_tag_os="$ec2_tag_os" -e ec2_tag_os_user="$ec2_tag_os_user" -e ec2_tag_ssh_port="$ec2_tag_ssh_port" -e ec2_tag_team="$ec2_tag_team" -e ec2_tag_service="$ec2_tag_service" -e ec2_tag_app_version="$ec2_tag_app_version" -e es_kibana_version="$es_kibana_version" -e es_password="$es_password" -e mount_path="$mount_path" -e mount_opts="$mount_opts" -e mount_state="$mount_state" -e mount_dump="$mount_dump" -e mount_passno="$mount_passno" -e partition_num="$partition_num" -e fs_type="$fs_type" -e mount_src="$mount_src" -e extra_vol_device_name="$extra_vol_device_name" -e extra_vol_os_name="$extra_vol_os_name" -e target_type="$target_type" -e tg_vpc_id="$tg_vpc_id" -e protocol_version="$protocol_version" -e tg_deregistration_delay_timeout="$tg_deregistration_delay_timeout" -e lb_tg_create="$lb_tg_create" -e data_tg_name="$data_tg_name" -e data_tg_protocol="$data_tg_protocol" -e data_tg_port="$data_tg_port" -e data_tg_healthcheck_protocol="$data_tg_healthcheck_protocol" -e data_tg_healthcheck_path="$data_tg_healthcheck_path" -e data_tg_healthcheck_port="$data_tg_healthcheck_port" -e data_tg_healthcheck_success_response_code="$data_tg_healthcheck_success_response_code" -e data_tg_healthcheck_interval="$data_tg_healthcheck_interval" -e data_tg_healthcheck_timeout="$data_tg_healthcheck_timeout" -e data_tg_healthcheck_healthy_count="$data_tg_healthcheck_healthy_count" -e data_tg_healthcheck_unhealthy_count="$data_tg_healthcheck_unhealthy_count" -e fleetserver_tg_create="$fleetserver_tg_create" -e fleetserver_tg_name="$fleetserver_tg_name" -e fleetserver_tg_protocol="$fleetserver_tg_protocol" -e fleetserver_tg_port="$fleetserver_tg_port" -e fleetserver_tg_healthcheck_protocol="$fleetserver_tg_healthcheck_protocol" -e fleetserver_tg_healthcheck_path="$fleetserver_tg_healthcheck_path" -e fleetserver_tg_healthcheck_port="$fleetserver_tg_healthcheck_port" -e fleetserver_tg_healthcheck_success_response_code="$fleetserver_tg_healthcheck_success_response_code" -e fleetserver_tg_healthcheck_interval="$fleetserver_tg_healthcheck_interval" -e fleetserver_tg_healthcheck_timeout="$fleetserver_tg_healthcheck_timeout" -e fleetserver_tg_healthcheck_healthy_count="$fleetserver_tg_healthcheck_healthy_count" -e fleetserver_tg_healthcheck_unhealthy_count="$fleetserver_tg_healthcheck_unhealthy_count" -e elasticapm_tg_create="$elasticapm_tg_create" -e elasticapm_tg_name="$elasticapm_tg_name" -e elasticapm_tg_protocol="$elasticapm_tg_protocol" -e elasticapm_tg_port="$elasticapm_tg_port" -e elasticapm_tg_healthcheck_protocol="$elasticapm_tg_healthcheck_protocol" -e elasticapm_tg_healthcheck_path="$elasticapm_tg_healthcheck_path" -e elasticapm_tg_healthcheck_port="$elasticapm_tg_healthcheck_port" -e elasticapm_tg_healthcheck_success_response_code="$elasticapm_tg_healthcheck_success_response_code" -e elasticapm_tg_healthcheck_interval="$elasticapm_tg_healthcheck_interval" -e elasticapm_tg_healthcheck_timeout="$elasticapm_tg_healthcheck_timeout" -e elasticapm_tg_healthcheck_healthy_count="$elasticapm_tg_healthcheck_healthy_count" -e elasticapm_tg_healthcheck_unhealthy_count="$elasticapm_tg_healthcheck_unhealthy_count" -e kibana_setup="$kibana_setup" -e kibana_tg_name="$kibana_tg_name" -e kibana_tg_protocol="$kibana_tg_protocol" -e kibana_tg_port="$kibana_tg_port" -e kibana_tg_healthcheck_protocol="$kibana_tg_healthcheck_protocol" -e kibana_tg_healthcheck_path="$kibana_tg_healthcheck_path" -e kibana_tg_healthcheck_port="$kibana_tg_healthcheck_port" -e kibana_tg_healthcheck_success_response_code="$kibana_tg_healthcheck_success_response_code" -e kibana_tg_healthcheck_interval="$kibana_tg_healthcheck_interval" -e kibana_tg_healthcheck_timeout="$kibana_tg_healthcheck_timeout" -e kibana_tg_healthcheck_healthy_count="$kibana_tg_healthcheck_healthy_count" -e kibana_tg_healthcheck_unhealthy_count="$kibana_tg_healthcheck_unhealthy_count" -e lb_name="$lb_name" -e lb_scheme="$lb_scheme" -e lb_ip_address_type="$lb_ip_address_type" -e lb_security_groups="$lb_security_groups" -e lb_subnets="$lb_subnets" -e lb_idle_timeout="$lb_idle_timeout" -e lb_enable_access_logs="$lb_enable_access_logs" -e lb_s3_bucket_name="$lb_s3_bucket_name" -e lb_s3_prefix="$lb_s3_prefix" -e lb_listener_security_policy="$lb_listener_security_policy" -e lb_listener_certificate_arn="$lb_listener_certificate_arn" -e master_hot_ec2_instance_type="$master_hot_ec2_instance_type" -e master_hot_ec2_tag_Name="$master_hot_ec2_tag_Name" -e master_hot_ec2_count="$master_hot_ec2_count" -e master_hot_ec2_volume_size="$master_hot_ec2_volume_size" -e master_hot_extra_vol_size="$master_hot_extra_vol_size" -e "master_hot_node_roles='$master_hot_node_roles'" -e frozen_cold_ml_ec2_instance_type="$frozen_cold_ml_ec2_instance_type" -e frozen_cold_ml_ec2_tag_Name="$frozen_cold_ml_ec2_tag_Name" -e frozen_cold_ml_ec2_count="$frozen_cold_ml_ec2_count" -e frozen_cold_ml_ec2_volume_size="$frozen_cold_ml_ec2_volume_size" -e frozen_cold_ml_extra_vol_size="$frozen_cold_ml_extra_vol_size" -e "frozen_cold_ml_node_roles='$frozen_cold_ml_node_roles'" -e searchable_snapshot_cache_size="$searchable_snapshot_cache_size" -e kibana_ec2_instance_type="$kibana_ec2_instance_type" -e kibana_ec2_tag_Name="$kibana_ec2_tag_Name" -e kibana_ec2_count="$kibana_ec2_count" -e kibana_ec2_volume_size="$kibana_ec2_volume_size" -e publicBaseUrl="$publicBaseUrl" -e security_encryptionKey="$security_encryptionKey" -e savedobject_encryptionKey="$savedobject_encryptionKey" -e reporting_encryptionKey="$reporting_encryptionKey" -e enterprisesearch_host="$enterprisesearch_host" -e es_host="$es_host" -e attach_ec2_extra_volume="$attach_ec2_extra_volume" -e mount_to_instance_storage="$mount_to_instance_storage" -e seperate_frozen_node="$seperate_frozen_node" -e "kibana_node_roles='$kibana_node_roles'" -e kbn_voteronly="$kbn_voteronly"
+---
+- name: ALB setup for elasticsearch kibana monitoring
+  hosts: localhost
+  gather_facts: false
+  tasks:  
+    - name: Create data tg
+      include_role:
+        name: "create_tg"  
+      vars:  
+        tg_name: "{{data_tg_name}}"
+        tg_protocol: "{{data_tg_protocol}}"
+        tg_port: "{{data_tg_port}}"
+        tg_healthcheck_protocol: "{{data_tg_healthcheck_protocol}}"
+        tg_healthcheck_path: "{{data_tg_healthcheck_path}}"
+        tg_healthcheck_port: "{{data_tg_healthcheck_port}}"
+        tg_healthcheck_interval: "{{data_tg_healthcheck_interval}}"
+        tg_healthcheck_timeout: "{{data_tg_healthcheck_timeout}}"
+        tg_healthcheck_healthy_count: "{{data_tg_healthcheck_healthy_count}}"
+        tg_healthcheck_unhealthy_count: "{{data_tg_healthcheck_unhealthy_count}}"
+        tg_healthcheck_success_response_code: "{{data_tg_healthcheck_success_response_code}}"
+        tg_environment: "{{ec2_tag_environment}}"
+        tg_service: "{{ec2_tag_cluster}}"
+        tg_team: "{{ec2_tag_team}}"
+        stickiness_enabled: "false"
+      when: lb_tg_create == 'yes'
+
+    - name: set varaible for data tg
+      set_fact:
+        data_tg: "{{tg_arn.target_group_arn}}"
+      when: lb_tg_create == 'yes'
+
+    - name: Create fleetserver tg
+      include_role:
+        name: "create_tg"  
+      vars:  
+        tg_name: "{{fleetserver_tg_name}}"
+        tg_protocol: "{{fleetserver_tg_protocol}}"
+        tg_port: "{{fleetserver_tg_port}}"
+        tg_healthcheck_protocol: "{{fleetserver_tg_healthcheck_protocol}}"
+        tg_healthcheck_path: "{{fleetserver_tg_healthcheck_path}}"
+        tg_healthcheck_port: "{{fleetserver_tg_healthcheck_port}}"
+        tg_healthcheck_interval: "{{fleetserver_tg_healthcheck_interval}}"
+        tg_healthcheck_timeout: "{{fleetserver_tg_healthcheck_timeout}}"
+        tg_healthcheck_healthy_count: "{{fleetserver_tg_healthcheck_healthy_count}}"
+        tg_healthcheck_unhealthy_count: "{{fleetserver_tg_healthcheck_unhealthy_count}}"
+        tg_healthcheck_success_response_code: "{{fleetserver_tg_healthcheck_success_response_code}}"
+        tg_environment: "{{ec2_tag_environment}}"
+        tg_service: "{{ec2_tag_cluster}}"
+        tg_team: "{{ec2_tag_team}}"
+        stickiness_enabled: "false"
+      when: lb_tg_create == 'yes' and fleetserver_tg_create == 'yes'
+
+    - name: set varaible for fleetserver tg
+      set_fact:
+        fleetserver_tg: "{{tg_arn.target_group_arn}}"
+      when: lb_tg_create == 'yes' and fleetserver_tg_create == 'yes'
+
+    - name: Create elastic-apm tg
+      include_role:
+        name: "create_tg"  
+      vars:  
+        tg_name: "{{elasticapm_tg_name}}"
+        tg_protocol: "{{elasticapm_tg_protocol}}"
+        tg_port: "{{elasticapm_tg_port}}"
+        tg_healthcheck_protocol: "{{elasticapm_tg_healthcheck_protocol}}"
+        tg_healthcheck_path: "{{elasticapm_tg_healthcheck_path}}"
+        tg_healthcheck_port: "{{elasticapm_tg_healthcheck_port}}"
+        tg_healthcheck_interval: "{{elasticapm_tg_healthcheck_interval}}"
+        tg_healthcheck_timeout: "{{elasticapm_tg_healthcheck_timeout}}"
+        tg_healthcheck_healthy_count: "{{elasticapm_tg_healthcheck_healthy_count}}"
+        tg_healthcheck_unhealthy_count: "{{elasticapm_tg_healthcheck_unhealthy_count}}"
+        tg_healthcheck_success_response_code: "{{elasticapm_tg_healthcheck_success_response_code}}"
+        tg_environment: "{{ec2_tag_environment}}"
+        tg_service: "{{ec2_tag_cluster}}"
+        tg_team: "{{ec2_tag_team}}"
+        stickiness_enabled: "false"
+      when: lb_tg_create == 'yes' and elasticapm_tg_create == 'yes'
+
+    - name: set varaible for elastic-apm tg
+      set_fact:
+        elasticapm_tg: "{{tg_arn.target_group_arn}}"
+      when: lb_tg_create == 'yes' and elasticapm_tg_create == 'yes'
+
+    - name: Create kibana tg
+      include_role:
+        name: "create_tg"  
+      vars:  
+        tg_name: "{{kibana_tg_name}}"
+        tg_protocol: "{{kibana_tg_protocol}}"
+        tg_port: "{{kibana_tg_port}}"
+        tg_healthcheck_protocol: "{{kibana_tg_healthcheck_protocol}}"
+        tg_healthcheck_path: "{{kibana_tg_healthcheck_path}}"
+        tg_healthcheck_port: "{{kibana_tg_healthcheck_port}}"
+        tg_healthcheck_interval: "{{kibana_tg_healthcheck_interval}}"
+        tg_healthcheck_timeout: "{{kibana_tg_healthcheck_timeout}}"
+        tg_healthcheck_healthy_count: "{{kibana_tg_healthcheck_healthy_count}}"
+        tg_healthcheck_unhealthy_count: "{{kibana_tg_healthcheck_unhealthy_count}}"
+        tg_healthcheck_success_response_code: "{{kibana_tg_healthcheck_success_response_code}}"
+        tg_environment: "{{ec2_tag_environment}}"
+        tg_service: "{{ec2_tag_cluster}}"
+        tg_team: "{{ec2_tag_team}}"
+        stickiness_enabled: "true"
+      when: lb_tg_create == 'yes' and kibana_setup == 'yes'
+
+    - name: set varaible for kibana tg
+      set_fact:
+        kibana_tg: "{{tg_arn.target_group_arn}}"
+      when: lb_tg_create == 'yes' and kibana_setup == 'yes'
+
+    - name: set varaible for adding listners in ALB
+      set_fact:
+       lb_listner: >
+        {{
+          [
+            {
+              "Protocol": "HTTP",
+              "Port": "80",
+              "DefaultActions": [
+                { "Type": "redirect", "RedirectConfig": { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301" } }
+              ]
+            },
+            {
+              "Protocol": "HTTPS",
+              "Port": "9200",
+              "SslPolicy": lb_listener_security_policy,
+              "Certificates": [ { "CertificateArn": lb_listener_certificate_arn } ],
+              "DefaultActions": [ { "Type": "forward", "TargetGroupArn": data_tg } ]
+            },
+          ]
+          + ([
+              {
+                "Protocol": "HTTPS",
+                "Port": "8200",
+                "SslPolicy": lb_listener_security_policy,
+                "Certificates": [ { "CertificateArn": lb_listener_certificate_arn } ],
+                "DefaultActions": [ { "Type": "forward", "TargetGroupArn": elasticapm_tg } ]
+              }
+            ] if elasticapm_tg_create == 'yes' else [] )
+          + ([
+              {
+                "Protocol": "HTTPS",
+                "Port": "8220",
+                "SslPolicy": lb_listener_security_policy,
+                "Certificates": [ { "CertificateArn": lb_listener_certificate_arn } ],
+                "DefaultActions": [ { "Type": "forward", "TargetGroupArn": fleetserver_tg } ]
+              }
+            ] if fleetserver_tg_create == 'yes' else [])
+          + ([
+              {
+                "Protocol": "HTTPS",
+                "Port": "443",
+                "SslPolicy": lb_listener_security_policy,
+                "Certificates": [ { "CertificateArn": lb_listener_certificate_arn } ],
+                "DefaultActions": [ { "Type": "forward", "TargetGroupArn": kibana_tg } ]
+              }
+            ] if kibana_setup == 'yes' else [])
+        }}
+      when: lb_tg_create == 'yes'
+
+    - name: Create application loadbalancer
+      include_role:
+        name: "create_lb"  
+      vars: 
+        lb_service: "{{ec2_tag_cluster}}"
+        lb_team: "{{ec2_tag_team}}"
+        lb_environment: "{{ec2_tag_environment}}"
+        lb_listners: "{{ lb_listner }}"
+      when: lb_tg_create == 'yes'
+
+- name: Create master_hot es nodes
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Launch ec2 instances
+      include_role:
+        name: "ec2up"
+      vars:
+        ec2_instance_type: "{{master_hot_ec2_instance_type}}"
+        ec2_tag_Name: "{{master_hot_ec2_tag_Name}}"
+        ec2_tag_service: "{{master_hot_ec2_tag_Name }}"
+        ec2_count: "{{master_hot_ec2_count}}"
+        ec2_volume_size: "{{master_hot_ec2_volume_size}}"
+        host_groupname: master_hot
+        action: create
+
+    - name: Attach extra volume to ec2 instances
+      include_role:
+        name: "ec2_extra_volume" 
+      vars:
+        vol_device_name: "{{extra_vol_device_name}}"
+        vol_tag_name: "{{master_hot_ec2_tag_Name}}"
+        vol_size: "{{master_hot_extra_vol_size}}"
+        vol_os_name: "{{extra_vol_os_name}}"   
+      when: attach_ec2_extra_volume == 'yes'
+
+    - name: Register master_hot nodes to target groups
+      community.aws.elb_target:
+        target_group_name: "{{ data_tg_name }}"
+        target_id: "{{ item.instance_id }}"
+        target_port: "{{ data_tg_port }}"
+        state: present
+        region: "{{ aws_region }}"
+      loop: "{{ ec2_instance_create.instances }}"
+
+- name: Install elasticsearch on master_hot es nodes
+  hosts: master_hot
+  gather_facts: false
+  become: yes
+  tasks:
+    - name: Configure elasticsearch and kibana
+      include_role:
+        name: "elasticsearch_kibana_setup"
+      vars:
+        ec2_tag_Name: "{{master_hot_ec2_tag_Name}}"
+        node_roles: "{{master_hot_node_roles}}"
+        es_install: 'yes'
+        kibana_install: 'no'
+        disk_mount: 'yes'
+        host_groupname: master_hot
+
+    - set_fact:
+        estoken: "{{ hostvars[groups['master_hot'][0]].es_token.stdout }}"
+      when: 
+        - (inventory_hostname == groups['master_hot'][0])
+
+    - name: Add security limit config for master_hot nodes
+      ansible.builtin.blockinfile:
+        path: /etc/security/limits.conf
+        marker: "# ANSIBLE MANAGED BLOCK"
+        insertbefore: "^# End of file"
+        block: |
+          root soft nproc 65536
+          root hard nproc 65536
+          elasticsearch soft nproc 65536
+          elasticsearch hard nproc 65536
+          root soft nofile 65536
+          root hard nofile 65536
+          elasticsearch soft nofile 65536
+          elasticsearch hard nofile 65536
+
+    - name: adding searchable_snapshot_cache_size setting for frozen node
+      shell: |
+        sed -i '/#transport.host: 0.0.0.0/a\xpack.searchable.snapshot.shared_cache.size: {{searchable_snapshot_cache_size}}' /etc/elasticsearch/elasticsearch.yml     
+      when: seperate_frozen_node == 'no'     
+
+    - name: task to restart the elasticsearch service
+      shell: |
+        systemctl restart elasticsearch
+
+- name: Create frozen_cold_ml es nodes
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Launch ec2 instances
+      include_role:
+        name: "ec2up"
+      vars:
+        ec2_instance_type: "{{frozen_cold_ml_ec2_instance_type}}"
+        ec2_tag_Name: "{{frozen_cold_ml_ec2_tag_Name}}"
+        ec2_tag_service: "{{frozen_cold_ml_ec2_tag_Name }}"
+        ec2_count: "{{frozen_cold_ml_ec2_count}}"
+        ec2_volume_size: "{{frozen_cold_ml_ec2_volume_size}}"
+        host_groupname: frozen_cold_ml
+        action: create
+      when: seperate_frozen_node == 'yes'
+
+    - name: Attach extra volume to ec2 instances
+      include_role:
+        name: "ec2_extra_volume" 
+      vars:
+        vol_device_name: "{{extra_vol_device_name}}"
+        vol_tag_name: "{{frozen_cold_ml_ec2_tag_Name}}"
+        vol_size: "{{frozen_cold_ml_extra_vol_size}}"
+        vol_os_name: "{{extra_vol_os_name}}"   
+      when: seperate_frozen_node == 'yes' and attach_ec2_extra_volume == 'yes'
+
+- name: Install elasticsearch on frozen_cold_ml es nodes
+  hosts: frozen_cold_ml
+  gather_facts: false
+  become: yes
+  tasks:
+    - name: Configure elasticsearch and kibana
+      include_role:
+        name: "elasticsearch_kibana_setup"
+      vars:
+        ec2_tag_Name: "{{frozen_cold_ml_ec2_tag_Name}}"
+        node_roles: "{{frozen_cold_ml_node_roles}}"
+        es_install: 'yes'
+        kibana_install: 'no'
+        host_groupname: master_hot
+        disk_mount: 'yes'
+      when: seperate_frozen_node == 'yes'
+        
+    - name: Add security limit config for frozen_cold_ml nodes
+      ansible.builtin.blockinfile:
+        path: /etc/security/limits.conf
+        marker: "# ANSIBLE MANAGED BLOCK"
+        insertbefore: "^# End of file"
+        block: |
+          root soft nproc 65536
+          root hard nproc 65536
+          elasticsearch soft nproc 65536
+          elasticsearch hard nproc 65536
+          root soft nofile 65536
+          root hard nofile 65536
+          elasticsearch soft nofile 65536
+          elasticsearch hard nofile 65536
+      when: seperate_frozen_node == 'yes'
+
+    - name: adding searchable_snapshot_cache_size setting for frozen node
+      shell: |
+        sed -i '/#transport.host: 0.0.0.0/a\xpack.searchable.snapshot.shared_cache.size: {{searchable_snapshot_cache_size}}' /etc/elasticsearch/elasticsearch.yml
+        systemctl restart elasticsearch
+      when: seperate_frozen_node == 'yes'
+
+- name: Create kibana nodes
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Launch ec2 instances
+      include_role:
+        name: "ec2up"
+      vars:
+        ec2_instance_type: "{{kibana_ec2_instance_type}}"
+        ec2_tag_Name: "{{kibana_ec2_tag_Name}}"
+        ec2_tag_service: "{{kibana_ec2_tag_Name }}"
+        ec2_count: "{{kibana_ec2_count}}"
+        ec2_volume_size: "{{kibana_ec2_volume_size}}"
+        host_groupname: kibana
+        action: create
+      when: kibana_setup == 'yes'
+
+    - name: Register kibana nodes to target groups
+      community.aws.elb_target:
+        target_group_name: "{{ kibana_tg_name }}"
+        target_id: "{{ item.instance_id }}"
+        target_port: "{{ kibana_tg_port }}"
+        state: present
+        region: "{{ aws_region }}"
+      loop: "{{ ec2_instance_create.instances }}"
+      when: kibana_setup == 'yes'
+
+- name: Install kibana on kibana nodes
+  hosts: kibana
+  gather_facts: false
+  become: yes
+  tasks:
+    - name: Configure kibana
+      include_role:
+        name: "elasticsearch_kibana_setup"
+      vars:
+        estoken: "{{hostvars[groups['master_hot'][0]].es_token.stdout}}"
+        ec2_tag_Name: "{{kibana_ec2_tag_Name}}"
+        es_install: "{{ 'yes' if kbn_voteronly == 'yes' else 'no' }}"
+        host_groupname: master_hot
+        kibana_install: 'yes'
+        node_roles: "{{ kibana_node_roles }}"
+        disk_mount: 'no'
+      when: kibana_setup == 'yes'
+
+    - name: Modification in kibana Conf file
+      shell: |
+        {% if es_kibana_version.split('.')[0]|int < 9 %}
+        echo "enterpriseSearch.host: {{ enterprisesearch_host }}" >> /etc/kibana/kibana.yml
+        {% endif %}
+        {% if kbn_voteronly == 'yes' %}
+        sed -i '/^-XX:+UseG1GC/i -Xms{{kbn_es_jvm_memory}}g\n-Xmx{{kbn_es_jvm_memory}}g' /etc/elasticsearch/jvm.options
+        systemctl restart elasticsearch.service
+        {% endif %}
+        sed -i "s|elasticsearch\.hosts: *\[[^]]*\]|elasticsearch.hosts: ['{{es_host}}']|g" /etc/kibana/kibana.yml
+        sed -i '/xpack\.fleet.outputs:/ s/^/#/' /etc/kibana/kibana.yml
+        systemctl restart kibana.service
+      when: kibana_setup == 'yes'
+
+- name: Activate free trial license in Kibana
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Pause for 1 minute for kibana server to get healthy in tg
+      ansible.builtin.pause:
+        minutes: 1
+      when: kibana_setup == 'yes'
+
+    - name: Activate free trial
+      include_role:
+        name: "post_request"
+      vars:
+        url: "{{es_host}}/_license/start_trial?acknowledge=true"
+        user: "elastic"
+        password: "{{es_password}}"
+        force_basic_auth: yes
+        headers: '{"kbn-xsrf": "true"}'
+      when: kibana_setup == 'yes'

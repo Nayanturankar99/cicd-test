@@ -1,0 +1,6 @@
+- name: Use provided AMI IDs for deletion
+  set_fact:
+    ami_ids: "{{ ami_id_list.split(',') }}"
+- name: Debug AMI IDs before deletion
+  debug:
+    var: ami_ids

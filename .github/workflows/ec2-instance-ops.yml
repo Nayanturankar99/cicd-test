@@ -1,0 +1,69 @@
+name: EC2 Instance Operations
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Select start or stop"
+        required: true
+        type: choice
+        options:
+          - start
+          - stop
+
+      private_ip_address:
+        description: "Enter private IP(s) comma-separated"
+        required: true
+        type: string
+
+jobs:
+  run-ansible:
+    runs-on: self-hosted
+
+    env:
+      GCHAT_WEBHOOK: "https://chat.googleapis.com/v1/spaces/AAQAUQj1M_c/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=_-xuDFp8SzMwi_SbxXXI6FKwqZpCcdWIl3Ph7FovHtk"
+
+    steps:
+
+    # ---------------------------------
+    # Run Ansible Playbook
+    # ---------------------------------
+    - name: Run Ansible Playbook
+      id: run_playbook
+      continue-on-error: true
+      run: |
+        CLEAN_IPS=$(echo "${{ github.event.inputs.private_ip_address }}" | tr -d ' ')
+        echo "Running playbook with IPs: $CLEAN_IPS"
+
+        ansible-playbook ansible/playbooks/ec2_instance_operations.yml \
+          -e action="${{ github.event.inputs.action }}" \
+          -e private_ip_address="$CLEAN_IPS" \
+          -e aws_region="us-east-1"
+
+    # ---------------------------------
+    # SUCCESS Notification to GChat
+    # ---------------------------------
+    - name: Notify SUCCESS to Google Chat
+      if: steps.run_playbook.outcome == 'success'
+      run: |
+        if [ "${{ github.event.inputs.action }}" = "start" ]; then
+          MSG="*Instances started*\n*${{ github.event.inputs.private_ip_address }}*."
+        else
+          MSG="*Instances stopped*\n*${{ github.event.inputs.private_ip_address }}*."
+        fi
+
+        PAYLOAD="{\"text\": \"$MSG\n\n*Workflow:* $GITHUB_WORKFLOW\n*Run Number:* $GITHUB_RUN_NUMBER\n*User:* $GITHUB_ACTOR\n*Run URL:* $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID\"}"
+
+        curl -X POST -H "Content-Type: application/json" \
+          -d "$PAYLOAD" "$GCHAT_WEBHOOK"
+
+    # ---------------------------------
+    # FAILURE Notification to GChat
+    # ---------------------------------
+    - name: Notify FAILURE to Google Chat
+      if: steps.run_playbook.outcome != 'success'
+      run: |
+        PAYLOAD="{\"text\": \"*FAILED EC2 Action*\n*Action:* ${{ github.event.inputs.action }}\n*IPs:* ${{ github.event.inputs.private_ip_address }}\n\n*Workflow:* $GITHUB_WORKFLOW\n*Run Number:* $GITHUB_RUN_NUMBER\n*User:* $GITHUB_ACTOR\n*URL:* $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID\"}"
+
+        curl -X POST -H "Content-Type: application/json" \
+          -d "$PAYLOAD" "$GCHAT_WEBHOOK"

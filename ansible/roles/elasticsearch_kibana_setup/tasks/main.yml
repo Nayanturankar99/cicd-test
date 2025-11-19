@@ -1,0 +1,191 @@
+---
+- name: Install epel-release packages
+  dnf:
+   name:
+    - epel-release
+   state: present
+
+- name: Update all packages
+  dnf:
+   name: '*'
+   state: latest   
+
+- name: Install packages
+  dnf:
+   name:
+    - vim
+    - wget
+    - unzip
+    - sysstat
+    - net-tools
+    - htop
+    - chromium-headless
+   state: present
+
+- name: Update crypto policies to LEGACY
+  command:
+   cmd: update-crypto-policies --set LEGACY
+
+- name: Reboot the machine
+  reboot:
+
+- name: Import an RPM key
+  rpm_key:
+   state: present
+   key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+
+- name: Copy the content for elastic repo
+  template:
+    src: elastic.repo.j2
+    dest: /etc/yum.repos.d/elastic.repo
+
+- name: Install elasticsearch
+  dnf:
+   name:
+    - elasticsearch-{{es_kibana_version}}
+   state: present
+  when: es_install == 'yes'
+
+- name: Create directory /data 
+  file:
+   path: "{{ mount_path }}"
+   state: directory
+  when: es_install == 'yes'
+
+- name: Determine if /dev/nvme1n1 is already mounted elsewhere
+  shell: "grep '/dev/nvme1n1' /proc/mounts"
+  register: diskfree_check
+  failed_when: false
+  delegate_to: "{{ inventory_hostname }}"
+  when: disk_mount == 'yes' and es_install == 'yes' and mount_to_instance_storage == 'yes'
+
+- name: Format the Disk /dev/nvme1n1
+  community.general.filesystem:
+    fstype: "{{fs_type}}"
+    dev: "{{ '/dev/nvme1n1' if (diskfree_check.stdout | length == 0) else '/dev/nvme0n1' }}"
+  when: disk_mount == 'yes' and es_install == 'yes' and mount_to_instance_storage == 'yes'
+
+- name: Determine if mount_src is already mounted elsewhere
+  shell: "grep '{{ mount_src }}' /proc/mounts"
+  register: mount_check
+  failed_when: false
+  delegate_to: "{{ inventory_hostname }}"
+  when: (disk_mount == 'yes' and es_install == 'yes' and attach_ec2_extra_volume == 'yes') 
+
+- name: Run blkid command with computed device
+  ansible.builtin.command:
+    cmd: >-
+      blkid {{ mount_src if (attach_ec2_extra_volume == 'yes' and mount_check.stdout | length == 0) 
+      else '/dev/nvme0n1p1' if (attach_ec2_extra_volume == 'yes' and mount_check.stdout | length > 0) 
+      else '/dev/nvme1n1' if (mount_to_instance_storage == 'yes' and diskfree_check.stdout | length == 0) 
+      else '/dev/nvme0n1' }}
+  register: blkid_output
+  delegate_to: "{{ inventory_hostname }}"
+  when: (disk_mount == 'yes' and es_install == 'yes' and attach_ec2_extra_volume == 'yes') or (disk_mount == 'yes' and es_install == 'yes' and mount_to_instance_storage == 'yes')
+
+- name: Mount filesystem
+  ansible.posix.mount:
+    path: "{{ mount_path }}"
+    src: "UUID={{ (blkid_output.stdout | regex_search('UUID=\"([^\"]+)\"', '\\1')) | first }}"
+    fstype: "{{ fs_type }}"
+    state: "{{ mount_state }}"
+    opts: "{{ mount_opts }}"
+    dump: "{{ mount_dump }}"
+    passno: "{{ mount_passno }}"
+  delegate_to: "{{ inventory_hostname }}"
+  when: (disk_mount == 'yes' and es_install == 'yes' and attach_ec2_extra_volume == 'yes') or (disk_mount == 'yes' and es_install == 'yes' and mount_to_instance_storage == 'yes')
+
+- name: Create directory and give owernership
+  file:
+   path: /data/elasticsearch
+   state: directory
+   owner: elasticsearch
+   group: elasticsearch
+   mode: '0755'
+  when: es_install == 'yes'
+
+- name: Write the configuration for elasticsearch
+  template:
+    src: elasticsearch.yml.j2
+    dest: /etc/elasticsearch/elasticsearch.yml
+  when: es_install == 'yes'
+
+- name: Install discovery-ec2 plugin
+  shell: "echo y | /usr/share/elasticsearch/bin/elasticsearch-plugin install discovery-ec2"
+  when: es_install == 'yes'
+
+- name: Start elasticsearch service
+  systemd:
+   name: elasticsearch.service
+   state: started
+   enabled: true
+  when: es_install == 'yes'
+  
+- name: Run elasticsearch-reset-password command
+  shell: |
+   echo -e "y\n{{es_password}}\n{{es_password}}" | /usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic -i
+  delegate_to: "{{ groups[host_groupname][0] }}"
+  run_once: true
+  when: 
+    - (es_install == 'yes')
+
+- name: Create enrollment token 
+  shell: "echo y | /usr/share/elasticsearch/bin/elasticsearch-create-enrollment-token -s kibana"
+  register: es_token
+  delegate_to: "{{ groups[host_groupname][0] }}"
+  run_once: true
+  when: 
+    - (es_install == 'yes')
+    
+- set_fact:
+    estoken: "{{ hostvars[groups[host_groupname][0]].es_token.stdout }}"
+  when: 
+    - (es_install == 'yes' and kibana_install == 'yes') 
+
+- name: Install Kibana
+  dnf:
+   name:
+    - kibana-{{es_kibana_version}}
+   state: present
+  when: kibana_setup == 'yes' and kibana_install == 'yes'
+
+- name: Update the configuration for Kibana
+  template:
+    src: kibana.yml.j2
+    dest: /etc/kibana/kibana.yml
+  when: kibana_setup == 'yes' and kibana_install == 'yes'
+ 
+- name: Run Kibana setup and input token
+  shell: echo "{{ estoken }}" | /usr/share/kibana/bin/kibana-setup
+  when: kibana_setup == 'yes' and kibana_install == 'yes'
+
+- name: Start Kibana service
+  systemd:
+   name: kibana.service
+   state: started
+   enabled: true
+  when: kibana_setup == 'yes' and kibana_install == 'yes'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,18 @@
+- name: Filter AMIs excluding dlm:managed and dont_delete=true
+  set_fact:
+    ami_ids: >-
+      {{
+        (unattached_ami_list
+          | selectattr('tags', 'defined')
+          | selectattr('tags.dont_delete', 'undefined')
+          | selectattr('tags.dlm:managed', 'undefined')
+          | map(attribute='image_id') | list) +
+        (unattached_ami_list
+          | selectattr('tags', 'defined')
+          | selectattr('tags.dont_delete', 'defined')
+          | selectattr('tags.dont_delete', 'equalto', 'false')
+          | map(attribute='image_id') | list)
+      }}
+- name: Debug filtered AMI IDs
+  debug:
+    var: ami_ids

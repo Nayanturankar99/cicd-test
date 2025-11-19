@@ -1,0 +1,7 @@
+---
+- name: Delete ASGs 
+  ec2_asg:
+   name: "{{ item }}"
+   state: absent
+   region: "{{aws_region}}"
+  with_items: "{{ asg_names }}"

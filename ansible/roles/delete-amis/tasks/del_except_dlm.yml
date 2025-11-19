@@ -1,0 +1,11 @@
+- name: Filter AMIs excluding dlm:managed
+  set_fact:
+    ami_ids: >-
+      {{
+        unattached_ami_list
+        | selectattr('tags.dlm:managed', 'undefined')
+        | map(attribute='image_id') | list
+      }}
+- name: debug amis
+  debug:
+    var: ami_ids

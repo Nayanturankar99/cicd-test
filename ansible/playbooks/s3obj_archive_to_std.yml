@@ -1,0 +1,17 @@
+# Playbook to download the db_backup and then restore database
+# Notes:
+#   - s3obj_archive_to_std  -->  Role to restore s3 object from glacier to standard
+# Example invocation:
+#   ansible-playbook -vvv /etc/ansible/playbooks/s3obj_archive_to_std.yml -e bucket_name="$bucket_name" -e object="$object" -e aws_region="$aws_region"
+---
+- name: Restore the S3 Object from deep-glaciar to standard
+  hosts: localhost
+  gather_facts: False
+  tasks: 
+    - name: Initiate restore from Glacier/Deep Archive
+      include_role:
+        name: s3obj_archive_to_std
+
+    - name: message after initiating restore
+      debug:
+        msg: "The object is stored in Glacier/Deep Archive and a restore has been initiated. Please wait up to 24 hours before trying to download the object again."

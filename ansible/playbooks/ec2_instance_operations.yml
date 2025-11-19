@@ -1,0 +1,33 @@
+# Generic Playbook for managing the EC2 instances.
+# Notes:
+#   - ec2up --> Role for launching and starting the EC2 instances.
+#   - ec2down --> Role for terminating and stopping the EC2 instances.
+# Example invocation for starting ec2 instance:
+#   ansible-playbook -vvv /etc/ansible/playbooks/ec2_instance_operations.yml -e action="start" -e private_ip_address="$private_ip_address" -e aws_region="$aws_region"
+# Example invocation for stopping ec2 instance:
+#   ansible-playbook -vvv /etc/ansible/playbooks/ec2_instance_operations.yml -e action="stop" -e private_ip_address="$private_ip_address" -e aws_region="$aws_region"
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Get ec2 instance details from private_ip_address
+      include_role:
+        name: ansible/roles/get_ec2_info
+      vars:
+        filter: {"private-ip-address": "{{ private_ip_address.split(',')}}"}
+        check_values: "{{ private_ip_address }}"
+        check_attribute: "private_ip_address" 
+
+    - name: Start ec2 instance
+      include_role:
+        name: ansible/roles/ec2up
+      vars:
+        ec2_instance_ids: "{{ instance_info.instances | map(attribute='instance_id') | join(',')}}"
+      when: action == 'start'
+
+    - name: Stop ec2 instance
+      include_role:
+        name: ansible/roles/ec2down
+      vars:
+        ec2_instance_ids: "{{ instance_info.instances | map(attribute='instance_id') | join(',')}}"
+      when: action == 'stop'

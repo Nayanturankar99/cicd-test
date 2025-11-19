@@ -1,0 +1,16 @@
+---
+- name: Create TargetTracking predefined policy
+  local_action:
+      module: community.aws.autoscaling_policy
+      name: "{{ asp_name }}"
+      policy_type: TargetTrackingScaling
+      target_tracking_config:
+         predefined_metric_spec:
+            predefined_metric_type: "{{asp_predefined_metric_type}}"
+            resource_label: "{{asp_resource_label if asp_predefined_metric_type == 'ALBRequestCountPerTarget' else omit }}"
+         target_value: "{{ asp_target_value }}"
+         disable_scalein: "{{ asp_disable_scalein }}"
+      asg_name: "{{ asg_name }}"
+      cooldown: "{{asp_cooldown}}"
+      region: "{{aws_region}}"
+  register: "asp_details"

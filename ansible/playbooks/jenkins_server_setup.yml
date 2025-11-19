@@ -1,0 +1,16 @@
+# Generic Playbook for creating the EC2 instances.
+# Notes:
+#   - ec2up --> Role for creating the EC2 instances.
+#   - jenkins_setup --> Role for configuring jenkins setup
+#   ansible-playbook -vvv /etc/ansible/playbooks/jenkins_server_setup.yml -e ec2_key_name: "$ec2_key_name" -e processor_type="$processor_type" -e ec2_sg_id: "$ec2_sg_id" -e ec2_instance_type: "$ec2_instance_type" -e termination_protection: "no" -e ec2_instance_profile: "$ec2_instance_profile" -e ec2_ami_id: "$ec2_ami_id" -e ec2_subnet_id: "$ec2_subnet-id" -e ec2_region: "us-east-1" -e assign_public_ip: "no" -e ec2_tag_Name: "$ec2_tag_name" -e ec2_tag_environment: "$ec2_tag_environment" -e ec2_tag_cluster: "$ec2_tag_cluster" -e ec2_tag_os: "rocky-linux-9" -e ec2_tag_os_user: "rocky" -e ec2_tag_ssh_port: "22" -e ec2_tag_service: "$ec2_tag_service" -e ec2_tag_team: "$ec2_tag_team" -e ec2_tag_app_version: "no-version" -e ec2_count: "$ec2_count" -e ec2_volume_size: "$ec2_volume_size"
+---
+- hosts: localhost
+  gather_facts: false
+  roles:
+    - { role: "ec2up", action: "create" }
+  
+- hosts: launched-instances
+  gather_facts: false
+  become: yes
+  roles:
+    - { role: "jenkins_setup" }

@@ -1,0 +1,16 @@
+- name: Start all Aurora instances in the cluster
+  amazon.aws.rds_cluster:
+    db_cluster_identifier: "{{item}}"
+    state: started
+    region: "{{aws_region}}"
+    wait: true
+  loop: "{{cluster_identifiers}}"
+  when: action == 'start'
+
+- name: Stop all Aurora instances in the cluster
+  amazon.aws.rds_cluster:
+    db_cluster_identifier: "{{item}}"
+    state: stopped
+    region: "{{aws_region}}"
+  loop: "{{cluster_identifiers}}"
+  when: action == 'stop'

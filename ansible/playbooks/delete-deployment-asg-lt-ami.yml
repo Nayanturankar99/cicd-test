@@ -1,0 +1,28 @@
+# Playbook to delete the ASG, LT and AMIs except the latest 
+# Notes:
+# delete-deployment-asg-lt-ami --> Role to call get and delete asg,lt,ami roles.
+# notify_to_gchat  -->  Post message to google chat.
+# Example invocation:
+# ansible-playbook /etc/ansible/playbooks/delete-deployment-asg-lt-ami.yml -e asgnames="$asgnames" -e ltnames="$ltnames" -e ami_services="$ami_services" -e aws_region="$aws_region" -e count="$count"
+
+---
+- name: Playbook to delete the deployment ASGs, LTs and AMIs except the top {{count}}
+  hosts: localhost  
+  tasks:
+    - name: Task to call role for deleting asg,lt,ami
+      include_role:
+        name: delete-deployment-asg-lt-ami
+      vars:
+        service: "{{ services.split(',')[service_index] }}"
+        ltname: "{{ ltnames.split(',')[service_index] }}"
+      loop: "{{ range(services.split(',') | length) }}"
+      loop_control:
+        loop_var: service_index
+
+    - name: Notify to Google Chat
+      include_role:
+        name: "notify_to_gchat"
+      vars:
+        message: "*Deployment ASGs, LTs and AMIs deleted, except top {{count}}* \n\n*Deleted ASGs:* \n{% for asg in ASGs %}\n- {{ asg }}\n{% endfor %} \n*Deleted LTs:* \n{% for lt in LTs %}\n- {{ lt }}\n{% endfor %} \n*Deleted AMIs:* \n{% for ami in AMIs %}\n- {{ ami }}\n{% endfor %}"
+        google_chat_webhook: "{{google_chat_webhook}}"
+      when: LTs | default([]) | length > 0

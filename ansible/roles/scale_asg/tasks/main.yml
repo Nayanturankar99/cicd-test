@@ -1,0 +1,9 @@
+- name: Scale ASG capacity
+  amazon.aws.autoscaling_group:
+    name: "{{ asg_name }}"
+    launch_template: "{{ omit if lt_name is not defined or lt_name.startswith('__omit_place_holder__') else {'launch_template_name': lt_name} }}"
+    mixed_instances_policy: "{{ omit if instance_types_list is not defined or instance_types_list[0].startswith('__omit_place_holder__') else {'instance_types': instance_types_list} }}"
+    min_size: "{{ min_capacity | int }}"
+    desired_capacity: "{{ desired_capacity | int }}"
+    max_size: "{{ max_capacity | int }}"
+    region: "{{ aws_region }}"

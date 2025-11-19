@@ -1,0 +1,51 @@
+# Notes 
+#   - find_asg --> Role to list of asg's.
+#   - delete-asg --> Role to delete the listed asg's.
+#   - get-all-lts --> Role to get list of lt's.
+#   - delete-lts --> Role to delete the listed lt's.
+#   - find_ami --> Role to get list of ami's.
+#   - delete-amis --> Role to delete the listed ami's.
+
+- name: Get all ASGs
+  include_role:
+    name: "find_asg"
+  vars: 
+    asg_tags: {"service": "{{service}}"}
+   
+- name: Delete ASGs
+  include_role:
+    name: "delete-asg"
+  vars:
+    asg_names: "{{ (asgs.results |  sort(reverse=true, attribute='created_time') | map(attribute='auto_scaling_group_name') | list)[count|int:]}}"
+
+- name: Assign deleted ASGs to a varaible
+  set_fact:
+    ASGs: "{{ ASGs | default([]) + (asgs.results |  sort(reverse=true, attribute='created_time') | map(attribute='auto_scaling_group_name') | list)[count|int:] }}"
+
+- name: Get all LTs
+  include_role:
+    name: "get-all-lts"
+
+- name: Delete LTs
+  include_role:
+    name: "delete-lts"
+
+- name: Assign deleted LTs to a varaible
+  set_fact:
+    LTs: "{{ (LTs | default([])) + (lt_contents.stdout.split('\n') if lt_contents.stdout | default('') != '' else []) }}"
+
+- name: Get all AMIs
+  include_role:
+    name: "find_ami"
+  vars:
+    filters: {"tag:service": "{{service}}"}
+
+- name: Delete AMIs
+  include_role:
+    name: "delete-amis"
+  vars:
+    ami_ids: "{{ (ami_list.images | sort(attribute='creation_date', reverse=true) | map(attribute='image_id') | list)[(count|int):] }}"
+
+- name: Assign deleted AMIs to a varaible
+  set_fact:
+    AMIs: "{{ AMIs | default([]) + (ami_list.images | sort(attribute='creation_date', reverse=true) | map(attribute='image_id') | list)[(count|int):] }}"

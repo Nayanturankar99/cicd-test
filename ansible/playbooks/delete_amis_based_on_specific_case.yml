@@ -1,0 +1,83 @@
+# Playbook to delete the ami's based on the cases seleted.
+# Notes:
+#   - find_ami --> Role to get the ami's.
+#   - delete-amis --> Role to delete the ami's.
+# ami_delete_type varaibles desciption:
+#   - del_by_ami_ids --> Used to delete the amis by passing the ami ids.
+#   - del_except_dlm --> Used to delete the amis except the dlm ami that are not attached to any instance.
+#   - del_except_dontdel --> Used to delete the amis except the ami with dont_delete tag that are not attached to any instance.
+#   - del_except_dlm_dontdel --> Used to delete the amis except the dlm ami the ami with dont_delete tag that are not attached to any instance.
+# Example invocation to delete amis by passing ami_ids:
+# ansible-playbook /etc/ansible/playbooks/delete_amis_based_on_specific_case.yml  -e ami_delete_type="del_by_ami_ids" -e aws_region="$aws_region" -e ami_id_list="$ami_id_list" -e google_chat_webhook="$google_chat_webhook"
+# Example invocation to delete amis of specific time range except DLM
+# ansible-playbook /etc/ansible/playbooks/delete_amis_based_on_specific_case.yml  -e filter_by_time="yes" -e ami_delete_type="del_except_dlm" -e aws_region="$aws_region" -e start_time="$start_time" -e end_time="$end_time" -e google_chat_webhook="$google_chat_webhook"
+# Example invocation to delete amis of specific time range except dont_delete tag
+# ansible-playbook /etc/ansible/playbooks/delete_amis_based_on_specific_case.yml  -e filter_by_time="yes" -e ami_delete_type="del_except_dontdel" -e aws_region="$aws_region" -e start_time="$start_time" -e end_time="$end_time" -e google_chat_webhook="$google_chat_webhook"
+# Example invocation to delete amis of specific time range except DLM and dont_delete tag
+# ansible-playbook /etc/ansible/playbooks/delete_amis_based_on_specific_case.yml  -e filter_by_time="yes" -e ami_delete_type="del_except_dlm_dontdel" -e aws_region="$aws_region" -e start_time="$start_time" -e end_time="$end_time" -e google_chat_webhook="$google_chat_webhook"
+
+- hosts: localhost
+  gather_facts: False
+  vars:
+    ami_id_name_pairs: []
+  tasks:
+    - name: Include find AMIs role
+      include_role:
+        name: "find_ami"
+      vars:
+        filters: {"image-type": "machine", "is-public": "false"}
+      when: ami_delete_type != 'del_by_ami_ids'
+
+    - name: Filter AMIs within the specified time range
+      set_fact:
+        filtered_ami_list: >-
+          {{
+            (ami_list.images
+              | selectattr('creation_date', '>=', start_time)
+              | selectattr('creation_date', '<=', end_time)
+              | list)
+          }}  
+      when: filter_by_time == 'yes' and ami_delete_type != 'del_by_ami_ids'
+    
+    - name: Ami list not filtered by time
+      set_fact:
+        filtered_ami_list: >-
+          {{
+            (ami_list.images | list)
+          }}         
+      when: filter_by_time == 'no' and ami_delete_type != 'del_by_ami_ids'
+
+    - name: Get AMIs instance info that are attached to any instances
+      amazon.aws.ec2_instance_info:
+        region: "{{ aws_region }}"
+        filters:
+          image-id: "{{ item.image_id }}"
+      loop: "{{ filtered_ami_list }}"
+      register: ami_instance_info
+      when: ami_delete_type != 'del_by_ami_ids'
+      
+    - name: Set AMIs not attached to any instances
+      set_fact:
+        unattached_ami_list: >-
+          {{
+            filtered_ami_list | rejectattr('image_id', 'in', ami_instance_info.results | map(attribute='instances') | flatten | map(attribute='image_id') | list) | list
+          }}
+      when: ami_delete_type != 'del_by_ami_ids'
+
+    - name: Include delete AMIs role
+      include_role:
+        name: "delete-amis"
+
+    - name: Add each AMI ID and its Name
+      set_fact:
+        ami_id_name_pairs: "{{ ami_id_name_pairs + [item + ' : ' + (matched.tags.Name | default('NO_NAME'))] }}"
+      vars:
+        matched: "{{ ami_list.images | selectattr('image_id', 'equalto', item) | list | first | default({}) }}"
+      loop: "{{ ami_ids }}"
+
+    - name: Notify the amis deleted
+      include_role:
+        name: notify_to_gchat
+      vars:
+        message: "*List of amis deleted*\n\n{% for ami in ami_id_name_pairs %}\n- {{ ami }}\n{% endfor %}"
+      when: ami_ids | length > 0

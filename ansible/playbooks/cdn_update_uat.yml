@@ -1,0 +1,28 @@
+# Playbook to create a copy of a ec2 instance.
+# Notes:
+#   - get_ec2_info --> Role to get the information about ec2 instance.
+# Example invocation:
+# ansible-playbook  -vvv ansible/playbooks/cdn_update_uat.yml -e private_ip_address="$private_ip_address" -e aws_region=us-east-1 -e ec2_key_name=igp-prod-fe -e ec2_tag_os_user=rocky
+---
+- name: Get EC2 instance info
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Add all instance Private IPs to host group
+      add_host:
+        name: "{{ private_ip_address }}"
+        ansible_ssh_private_key_file: "~/.ssh/newigpkeys/{{ ec2_key_name }}.pem"
+        ansible_user: "{{ ec2_tag_os_user }}"
+        groups: uat_server
+
+- name: Forever restart app.js on EC2 instances
+  hosts: uat_server
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Restart app.js using forever
+      shell: |
+        export PATH=/root/.nvm/versions/node/v14.18.2/bin:$PATH
+        cd /opt/fe/
+        forever -r dotenv/config stop app.js
+        forever -r dotenv/config start app.js

@@ -1,0 +1,51 @@
+#!/bin/bash
+elastic_agent_role="{{elastic_agent_role}}"
+deployment_arch="{{processor_type}}"
+
+# Check if Elastic Agent is installed
+if command -v elastic-agent &> /dev/null
+then
+    if [[ "$elastic_agent_role" == "fleet_agent" ]]; then
+        echo y | elastic-agent enroll --url="{{ elastic_fleet_url }}" --enrollment-token="{{ elastic_fleet_enrolment_token }}" --tag="{{ elastic_fleet_tags }}"
+    elif [[ "$elastic_agent_role" == "fleet_server" ]]; then
+        echo y | elastic-agent enroll --fleet-server-es="{{es_host}}" --fleet-server-policy="{{fleet_server_policy_id}}"   --fleet-server-service-token="{{fleet_service_token}}" --fleet-server-port=8220
+    fi
+else
+
+    cd /tmp
+
+    if [[ "$elastic_agent_role" == "fleet_agent" ]]; then
+        if [[ "$deployment_arch" == "intel" ]]; then
+            curl -L -O https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-{{elastic_agent_version}}-linux-x86_64.tar.gz
+            tar xzvf elastic-agent-{{elastic_agent_version}}-linux-x86_64.tar.gz
+            cd elastic-agent-{{elastic_agent_version}}-linux-x86_64
+            echo y | ./elastic-agent install --url="{{ elastic_fleet_url }}" --enrollment-token="{{ elastic_fleet_enrolment_token }}" --tag="{{ elastic_fleet_tags }}"
+
+        elif [[ "$deployment_arch" == "graviton" ]]; then
+            curl -L -O https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-{{elastic_agent_version}}-linux-arm64.tar.gz
+            tar xzvf elastic-agent-{{elastic_agent_version}}-linux-arm64.tar.gz
+            cd elastic-agent-{{elastic_agent_version}}-linux-arm64
+            echo y | ./elastic-agent install --url="{{ elastic_fleet_url }}" --enrollment-token="{{ elastic_fleet_enrolment_token }}" --tag="{{ elastic_fleet_tags }}"
+        fi
+
+    elif [[ "$elastic_agent_role" == "fleet_server" ]]; then
+        if [[ "$deployment_arch" == "intel" ]]; then
+            curl -L -O https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-{{elastic_agent_version}}-linux-x86_64.tar.gz
+            tar xzvf elastic-agent-{{elastic_agent_version}}-linux-x86_64.tar.gz
+            cd elastic-agent-{{elastic_agent_version}}-linux-x86_64
+            echo y | ./elastic-agent install --fleet-server-es="{{es_host}}" --fleet-server-policy="{{fleet_server_policy_id}}"   --fleet-server-service-token="{{fleet_service_token}}" --fleet-server-port=8220 --tag="{{ elastic_fleet_tags }}"
+
+        elif [[ "$deployment_arch" == "graviton" ]]; then
+            curl -L -O https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-{{elastic_agent_version}}-linux-arm64.tar.gz
+            tar xzvf elastic-agent-{{elastic_agent_version}}-linux-arm64.tar.gz
+            cd elastic-agent-{{elastic_agent_version}}-linux-arm64
+            echo y | ./elastic-agent install --fleet-server-es="{{es_host}}" --fleet-server-policy="{{fleet_server_policy_id}}"   --fleet-server-service-token="{{fleet_service_token}}" --fleet-server-port=8220 --tag="{{ elastic_fleet_tags }}"
+        fi
+    fi
+fi
+
+# Restart Elastic Agent
+systemctl restart elastic-agent
+
+# Restart Rsyslog service
+systemctl restart rsyslog

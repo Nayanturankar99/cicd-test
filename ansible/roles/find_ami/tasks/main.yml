@@ -1,0 +1,6 @@
+---
+- name: Get AMIs 
+  amazon.aws.ec2_ami_info:
+    region: "{{aws_region}}" 
+    filters: "{{ filters }}"
+  register: ami_list

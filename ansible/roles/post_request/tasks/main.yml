@@ -1,0 +1,12 @@
+-  name: Post request
+   uri:
+    url: "{{url}}"
+    method: POST
+    headers: "{{headers}}"
+    body: "{{body | default(omit)}}"
+    body_format: "{{ body_format | default(omit) }}"
+    user: "{{ user | default(omit) }}"
+    password: "{{ password | default(omit) }}"
+    force_basic_auth: "{{ force_basic_auth | default(omit) }}"
+    validate_certs: "{{validate_certs | default(omit)}}"
+   register: request_result

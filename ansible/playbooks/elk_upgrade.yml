@@ -1,0 +1,94 @@
+# Playbook to Upgrade version of elk setup on tagged hosts dynamically
+# Notes:
+#   Upgrade the elasticsearch and kibana version on the required hosts
+#   Playbook works by filtering the hosts from dynamic inventory by the given tag key and value from user
+# Dependencies:
+#   Need to add required tag on the required instance. (e.g add tag key:cluster and tag value:jvmon005 for playbook to work on required hosts)
+# Example invocation:
+#   ansible-playbook -vvv /etc/ansible/playbooks/elk_upgrade.yml -e elk_version="$elk_version" -e tag_key_value="tag_key_value"
+
+---
+- name: Gather info from dynamic inventory
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Add hosts with dynamic SSH user and key
+      add_host:
+        name: "{{ item }}"
+        groups: elk_nodes
+        ansible_user: "{{ hostvars[item].tags.os_user }}"
+        ansible_ssh_private_key_file: "~/.ssh/newigpkeys/{{ hostvars[item].key_name }}.pem"
+      loop: "{{ groups[tag_key_value] }}"
+
+- name: Run playbook on elk_nodes
+  hosts: elk_nodes
+  become: yes
+  vars:
+    elk_major_version: "{{ elk_version.split('.')[0] }}"
+
+  tasks:
+    - name: Update Elasticsearch repo baseurl to match ELK major version
+      replace:
+        path: /etc/yum.repos.d/elastic.repo
+        regexp: 'packages/[0-9]+\.x'
+        replace: "packages/{{ elk_major_version }}.x"
+
+    - name: Update Elasticsearch repo name to match ELK major version
+      replace:
+        path: /etc/yum.repos.d/elastic.repo
+        regexp: 'repository for [0-9]+\.x packages'
+        replace: "repository for {{ elk_major_version }}.x packages"
+
+    - name: Gather installed package facts
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: Set facts if Elasticsearch and Kibana are installed
+      set_fact:
+        es_installed: "{{ 'elasticsearch' in ansible_facts.packages }}"
+        kibana_installed: "{{ 'kibana' in ansible_facts.packages }}"
+
+    - name: Upgrade Elasticsearch if installed
+      ansible.builtin.dnf:
+        name: "elasticsearch-{{ elk_version }}"
+        state: present
+      when: es_installed
+
+    - name: Upgrade Kibana if installed
+      ansible.builtin.dnf:
+        name: "kibana-{{ elk_version }}"
+        state: present
+      when: kibana_installed
+
+    - name: Stop Elasticsearch service
+      ansible.builtin.systemd:
+        name: elasticsearch
+        state: stopped
+      when: es_installed
+
+    - name: Stop Kibana service
+      ansible.builtin.systemd:
+        name: kibana
+        state: stopped
+      when: kibana_installed
+
+    - name: Remove discovery-ec2 plugin if installed
+      ansible.builtin.command: "/usr/share/elasticsearch/bin/elasticsearch-plugin remove discovery-ec2"
+      when: es_installed
+
+    - name: Install discovery-ec2 plugin with specified version
+      ansible.builtin.shell: |
+        /usr/share/elasticsearch/bin/elasticsearch-plugin install --batch "https://artifacts.elastic.co/downloads/elasticsearch-plugins/discovery-ec2/discovery-ec2-{{ elk_version }}.zip"
+      when: es_installed
+
+    - name: Start Elasticsearch service
+      ansible.builtin.systemd:
+        name: elasticsearch
+        state: started
+      when: es_installed
+
+    - name: Start Kibana service
+      ansible.builtin.systemd:
+        name: kibana
+        state: started
+      when: kibana_installed

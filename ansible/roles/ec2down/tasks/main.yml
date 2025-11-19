@@ -1,0 +1,22 @@
+---
+ - name: Stop EC2 Box
+   local_action:
+      module: ec2_instance
+      state: 'stopped'
+      region: "{{aws_region}}"
+      instance_ids: "{{ ec2_instance_ids.split(',') }}"
+      termination_protection: no
+      wait: true
+   register: ec2_instance_stop
+   when: action == "stop"
+
+ - name: Terminate EC2 Box
+   local_action:
+      module: ec2_instance
+      state: 'absent'
+      region: "{{aws_region}}"
+      instance_ids: "{{ ec2_instance_ids.split(',') }}"
+      wait: true
+      termination_protection: no
+   register: ec2_instance_terminate
+   when: action == "terminate"

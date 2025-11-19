@@ -1,0 +1,105 @@
+# playbook to start/stop EC2 instances and RDS clusters with a specific tag i.e environment=uat or test and restart=true
+# Notes:
+# start_stopec2_rds.yml --> Role to call rds_cluster_start_stop, get_ec2_info, ec2up, ec2down, notify_to_gchat
+# rds_cluster_start_stop --> start or stop the rds cluster according to "$action"
+# notify_to_gchat  --> Post message to Google Chat.
+# Required variables to pass in same sequence: $tag_key=environment,restart tag_value=test,uat,true
+# $action variable value should be "stop" or "start"
+# Example invocation:
+# ansible-playbook -vvv /etc/ansible/playbooks/stop_start_ec2_rds.yml -e action=$action -e aws_region=$aws_region -e tag_key=$tag_key -e tag_value=$tag_value -e google_chat_webhook_url="$google_chat_webhook_url"
+
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Get RDS cluster information
+      amazon.aws.rds_cluster_info:
+        region: "{{ aws_region }}"
+      register: rds_clusters
+
+    - name: Filter RDS clusters based on dynamic tag key-value pairs
+      set_fact:
+        cluster_identifiers: "{{ rds_clusters.clusters | selectattr('tag_list', 'search', tag_key.split(',')[0]) | selectattr('tag_list', 'search', tag_key.split(',')[1]) | selectattr('tag_list', 'search', tag_value.split(',')[0]) | selectattr('tag_list', 'search', tag_value.split(',')[2]) | map(attribute='db_cluster_identifier') | list }}"
+
+    - name: Include RDS start stop role
+      include_role:
+        name: rds_cluster_start_stop
+      when: cluster_identifiers | length > 0
+
+    - name: Filter EC2 instances for test environment
+      include_role:
+        name: get_ec2_info
+      vars:
+        filter: "tag:{{ tag_key.split(',')[0] }}={{ tag_value.split(',')[0] }},tag:{{ tag_key.split(',')[1] }}={{ tag_value.split(',')[2] }},instance-state-name=running"
+
+    - name: Set EC2 instance ids, ips and names for test environment
+      set_fact:
+        test_ec2_instance_ids: "{{ instance_info.instances | default([]) | map(attribute='instance_id') | list }}"
+        test_ec2_instance_private_ips: "{{ instance_info.instances | default([]) | map(attribute='private_ip_address') | list }}"
+        test_ec2_instance_names: "{{ instance_info.instances | default([]) | map(attribute='tags.Name') | list }}"
+
+    - name: Filter EC2 instances for UAT environment
+      include_role:
+        name: get_ec2_info
+      vars:
+        filter: "tag:{{ tag_key.split(',')[0] }}={{ tag_value.split(',')[1] }},tag:{{ tag_key.split(',')[1] }}={{ tag_value.split(',')[2] }},instance-state-name=running"
+      when: action == 'stop'
+
+    - name: Set EC2 instance ids, ips, and names for UAT environment
+      set_fact:
+        uat_ec2_instance_ids: "{{ instance_info.instances | default([]) | map(attribute='instance_id') | list }}"
+        uat_ec2_instance_private_ips: "{{ instance_info.instances | default([]) | map(attribute='private_ip_address') | list }}"
+        uat_ec2_instance_names: "{{ instance_info.instances | default([]) | map(attribute='tags.Name') | list }}"
+      when: action == 'stop'
+
+    - name: Combine EC2 instance IDs, Private IPs and Name from test and UAT environments
+      set_fact:
+        ec2_instance_id_list: "{{ test_ec2_instance_ids | default([]) + (uat_ec2_instance_ids | default([])) }}"
+        ec2_instance_private_ip_list: "{{ test_ec2_instance_private_ips | default([]) + (uat_ec2_instance_private_ips | default([])) }}"
+        ec2_instance_name_list: "{{ test_ec2_instance_names | default([]) + (uat_ec2_instance_names | default([])) }}"
+
+    - name: Start EC2 instances with filtered tags i.e test instances
+      include_role:
+        name: ec2up
+      vars:
+        action: start
+        ec2_instance_ids: "{{ ec2_instance_id_list | join(',') }}"
+      when: action == 'start' and ec2_instance_id_list | length > 0
+
+    - name: Stop EC2 instances based on combined list i.e uat and test instances
+      include_role:
+        name: ec2down
+      vars:
+        action: stop
+        ec2_instance_ids: "{{ ec2_instance_id_list | join(',') }}"
+      when: action == 'stop' and ec2_instance_id_list | length > 0
+
+    - name: Notify in Google Chat about started/stopped resources
+      include_role:
+        name: notify_to_gchat
+      vars:
+        message: |
+          {% if action == 'start' %}
+          *Resources with restart tag started!*
+          {% elif action == 'stop' %}
+          *Resources with restart tag stopped!*
+          {% endif %}
+
+          {% if ec2_instance_private_ip_list | length > 0 %}
+          *EC2 Instances (Count {{ ec2_instance_private_ip_list | length }}):*
+          {% for ip, name in ec2_instance_private_ip_list | zip(ec2_instance_name_list) %}
+          - {{ ip }} : {{ name | default('Unnamed') }}
+          {% endfor %}
+          {% else %}
+          No EC2 instances affected.
+          {% endif %}
+
+          {% if cluster_identifiers | length > 0 %}
+          *RDS Cluster/s:*
+          {% for cluster in cluster_identifiers %}
+          - {{ cluster }}
+          {% endfor %}
+          {% else %}
+          No RDS clusters affected.
+          {% endif %}
+        google_chat_webhook: "{{ google_chat_webhook_url }}"

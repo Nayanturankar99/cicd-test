@@ -1,0 +1,35 @@
+# Playbook to update cpmponent template of elk.
+# Example invocation for update component template
+# ansible-playbook  -vvv /etc/ansible/playbooks/component_template.yml --vault-password-file=${vault_pass_file} -e WORKSPACE=$WORKSPACE -e number_of_shards='${params.number_of_shards}' -e number_of_replicas='${params.number_of_replicas}' -e component_templates='${params.component_templates}' -e es_host='${params.es_host}' -e job_name='${env.JOB_NAME}' -e build_status='${currentBuild.currentResult}' -e build_timestamp='${env.BUILD_TIMESTAMP}' -e build_number='${env.BUILD_NUMBER}' -e build_user='${env.BUILD_USER}' -e build_url='${env.BUILD_URL}'
+---
+- name: Update Elasticsearch component templates
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Load Kibana credentials from vault file
+      include_vars:
+        file: "{{ workspace_path }}/es_cred.yml"
+
+    - name: Update specified component templates
+      include_role:
+        name: post_request
+      vars:
+        url: "{{ es_host }}/_component_template/{{ item }}"
+        method: PUT
+        body_format: json
+        user: "{{ kibana_username }}"
+        password: "{{ kibana_password }}"
+        headers:
+          Content-Type: "application/json"
+        body: >
+          {
+            "template": {
+              "settings": {
+                "index.number_of_shards": {{ number_of_shards }},
+                "index.number_of_replicas": {{ number_of_replicas }}
+              }
+            }
+          }
+        status_code: 200
+      loop: "{{ component_templates | string | split(',') }}"

@@ -1,0 +1,39 @@
+---
+# Notes:
+#   - find_asg --> Role for getting the asgs.
+#   - notify_to_gchat  -->  Role for sending message to google chat.
+
+- include_role:
+    name: find_asg
+  vars: 
+    asg_tags: {"service": "{{service}}"}
+
+- name: Check if ASGs exist and are non-empty
+  set_fact:
+    asgs_found: "{{ asgs.results is defined and asgs.results | length > 0 }}"
+
+- name: Notify if latest ASG is not active (0 instances)
+  include_role:
+    name: notify_to_gchat
+  vars:
+    message: "Latest ASG *{{ (asgs.results | sort(reverse=true, attribute='created_time')).0.auto_scaling_group_name }}* is not active i.e. this ASG has 0 instance. Please delete this ASG and also the LT and AMI related to this ASG."
+  when: asg_not_active is defined and asgs_found and (asgs.results | sort(reverse=true, attribute='created_time')).0.instances | length == 0
+
+- name: Notify if stack is oversized
+  include_role:
+    name: notify_to_gchat
+  vars:
+    message: "*{{ item }}* stack is oversized, from {{ vars[item | replace('-', '_') ~ '_capacity'] }} to {{ (asgs.results | sort(reverse=true, attribute='created_time')).0.desired_capacity }}. Please scale them back if the stats gets normal."
+  when: extra_asg_stack is defined and asgs_found and (asgs.results | sort(reverse=true, attribute='created_time')).0.desired_capacity > (vars[item | replace('-', '_') ~ '_capacity'] | int)
+
+- name: Notify if stack is undersized
+  include_role:
+    name: notify_to_gchat
+  vars:
+    message: "*{{ item }}* stack is undersized, from {{ vars[item | replace('-', '_') ~ '_capacity'] }} to {{ (asgs.results | sort(reverse=true, attribute='created_time')).0.desired_capacity }}. Please scale them back"
+  when: extra_asg_stack is defined and asgs_found and (asgs.results | sort(reverse=true, attribute='created_time')).0.desired_capacity < (vars[item | replace('-', '_') ~ '_capacity'] | int)
+
+- name: Debug when no ASGs are found
+  debug:
+    msg: "No Auto Scaling Groups found for the service '{{ service }}'."
+  when: not asgs_found
